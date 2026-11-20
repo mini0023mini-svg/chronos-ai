@@ -24,6 +24,31 @@ import {
  * 演示模式仓储：模拟 Supabase 的查询、软删除行为，并用 localStorage 持久化，
  * 使「数据可保存」在无需后端的演示模式下同样成立。切换真实 Supabase 后此类不再使用。
  */
+
+/**
+ * 一次性迁移：清除旧版演示种子中的「高等数学」课程已写入 localStorage 的数据。
+ * 背景：用户导入真实课表时，仓储会先以 seed 为底再 save，导致该课程被固化到浏览器；
+ * 仅改 seed 不足以让它消失，故这里按 id 精确剔除事件与重复规则，且只执行一次。
+ */
+const MATH_PURGE_KEY = 'chronos.mock.purgeMath.v1';
+function purgeLegacyMath(): void {
+  try {
+    if (localStorage.getItem(MATH_PURGE_KEY)) return;
+    const strip = (key: string, isMath: (row: { id?: string; title?: string }) => boolean) => {
+      const rows = safeJsonParse<Array<{ id?: string; title?: string }> | null>(localStorage.getItem(key), null);
+      if (!rows) return;
+      const kept = rows.filter((row) => !isMath(row));
+      if (kept.length !== rows.length) localStorage.setItem(key, JSON.stringify(kept));
+    };
+    strip('chronos.mock.events', (r) => r.title === '高等数学' || (r.id ?? '').startsWith('evt-math'));
+    strip('chronos.mock.recurring_rules', (r) => r.title === '高等数学' || r.id === 'rule-1');
+    localStorage.setItem(MATH_PURGE_KEY, '1');
+  } catch {
+    /* localStorage 不可用时跳过，不影响当前会话 */
+  }
+}
+purgeLegacyMath();
+
 /** 表名 → 同步作用域：只有核心表触发 UI 刷新，其余归为 all */
 const SYNC_SCOPE: Record<string, SyncScope> = {
   events: 'events',

@@ -4,7 +4,8 @@ import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
-import { useTheme } from '@/hooks/useTheme';
+import zhCnLocale from '@fullcalendar/core/locales/zh-cn';
+import { useI18n } from '@/hooks/useI18n';
 import { DEFAULT_TIMEZONE, formatInZone } from '@/lib/timezone';
 
 export type CalendarView = 'month' | 'week' | 'day';
@@ -69,9 +70,12 @@ export function toEventInput(event: CalendarEvent, timezone: string): EventInput
   };
 }
 
+/** 24 小时制（中国习惯）：事件标签与周视图时间轴都用它，避免 12h AM/PM */
+const timeFormat24 = { hour: '2-digit', minute: '2-digit', hour12: false } as const;
+
 /** FullCalendar 包装器：接入点击 / 拖动 / 空白日期新建 */
 export function CalendarShell({ events, view, timezone = DEFAULT_TIMEZONE, onEventClick, onEventDrop, onDateClick }: CalendarShellProps) {
-  const { resolvedTheme } = useTheme();
+  const { locale } = useI18n();
   const calendarView = view === 'month' ? 'dayGridMonth' : view === 'week' ? 'timeGridWeek' : 'timeGridDay';
 
   return (
@@ -91,7 +95,11 @@ export function CalendarShell({ events, view, timezone = DEFAULT_TIMEZONE, onEve
         selectable={Boolean(onDateClick)}
         navLinks={false}
         dayMaxEvents={3}
-        locale={resolvedTheme === 'dark' ? 'en' : undefined}
+        // 中文界面用 zh-cn（周一为一周起点、24 小时制），英文界面保留 en 但仍强制 24 小时制
+        locale={locale === 'zh-CN' ? zhCnLocale : 'en'}
+        firstDay={1}
+        eventTimeFormat={timeFormat24}
+        slotLabelFormat={timeFormat24}
         eventClick={(info) => {
           info.jsEvent.preventDefault();
           const found = events.find((e) => e.id === info.event.id);

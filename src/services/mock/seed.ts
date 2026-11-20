@@ -94,8 +94,6 @@ function weeklyInstances(
 }
 
 export const mockEvents: CalendarEvent[] = [
-  // 高等数学：每周一 09:00-10:30，物化 4 周
-  ...weeklyInstances('evt-math', '高等数学', '第 8 讲：多元函数微分', '教学楼 A-301', 0, 9, 10.5, 'cat-1', 'rule-1', 4),
   // 数据结构实验：每周四 14:00-16:00，物化 4 周
   ...weeklyInstances('evt-ds', '数据结构实验', null, '实验楼 B-205', 3, 14, 16, 'cat-1', 'rule-2', 4),
   {
@@ -118,19 +116,6 @@ export const mockEvents: CalendarEvent[] = [
 ];
 
 export const mockRecurringRules: RecurringRule[] = [
-  {
-    ...base(),
-    id: 'rule-1',
-    title: '高等数学',
-    freq: 'weekly',
-    interval: 1,
-    by_weekday: [1],
-    by_month_day: null,
-    start_date: iso(0).slice(0, 10),
-    end_date: null,
-    count: null,
-    superseded_by: null,
-  },
   {
     ...base(),
     id: 'rule-2',
