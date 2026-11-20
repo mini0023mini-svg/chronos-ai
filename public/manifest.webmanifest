@@ -1,0 +1,53 @@
+{
+  "name": "CHRONOS AI — Your Intelligent Life Management System",
+  "short_name": "CHRONOS AI",
+  "description": "个人 AI 生活管理系统：日程、任务、截止日期与智能规划。",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#F7F8FA",
+  "theme_color": "#829CC4",
+  "lang": "zh-CN",
+  "dir": "ltr",
+  "categories": ["productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "日历",
+      "short_name": "日历",
+      "description": "查看今日日程",
+      "url": "/calendar",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "任务",
+      "short_name": "任务",
+      "description": "查看任务列表",
+      "url": "/tasks",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "AI 助手",
+      "short_name": "AI 助手",
+      "description": "与 AI 助手对话",
+      "url": "/ai-assistant",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
