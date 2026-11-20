@@ -118,3 +118,16 @@ describe('scheduleParser.parseSchedule 端到端', () => {
     }
   });
 });
+
+describe('scheduleParser 周字重复的范围写法', () => {
+  it('「第7周-18周」展开为 7..18 全部周次而非首尾两周', () => {
+    expect(parseScheduleWeeks('第7周-18周')).toEqual([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]);
+  });
+
+  it('整行解析时标题不残留「-18周」，且按全周次展开', () => {
+    const cs = parseSchedule('周五 7-8节 第7周-18周 视听语言 @学思楼1-C410', { week2Monday: WEEK2_MONDAY, timezone: TZ });
+    expect(cs).toHaveLength(12);
+    expect(cs.every((c) => c.title === '视听语言（第7周）' || /^视听语言（第\d+周）$/.test(c.title))).toBe(true);
+    expect(cs.some((c) => c.title.includes('-18周'))).toBe(false);
+  });
+});

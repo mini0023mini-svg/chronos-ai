@@ -50,10 +50,16 @@ const DOW_MAP: Record<string, number> = {
   1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 0,
 };
 
+/** 归一化「第7周-18周」「7周至18周」这类周字重复的范围写法为 7-18周 */
+function normalizeWeekRange(line: string): string {
+  return line.replace(/第?\s*(\d+)\s*周\s*[-~–—至到]\s*(\d+)\s*周/g, '$1-$2周');
+}
+
 /** 解析周次表达式为具体周次数组。
- *  支持：1-18周 / 9-16周 / 第6周 / 4-6周,8-11周 / 1-18周(双) / 单周 / 隔周 */
+ *  支持：1-18周 / 9-16周 / 第6周 / 4-6周,8-11周 / 1-18周(双) / 第7周-18周 / 单周 / 隔周 */
 export function parseScheduleWeeks(expr: string): number[] {
   if (!expr || !expr.trim()) return [];
+  expr = normalizeWeekRange(expr);
   const parity: 'even' | 'odd' | null =
     /[（(]双[）)]|双周|隔周/.test(expr) ? 'even'
       : /[（(]单[）)]|单周/.test(expr) ? 'odd'
@@ -123,12 +129,15 @@ function formatDate(d: Date): string {
 
 function extractWeekExpr(line: string): string {
   const parts: string[] = [];
+  // 先归一化「第7周-18周」这类周字重复的范围写法，否则正则只会匹配到「第7周」，
+  // 把「18周」单独拆出来（导致只取到首尾两周）。
+  const norm = normalizeWeekRange(line);
   // a-b周 / 第N周 / N周（含可选 (双)/(单) 后缀）
   const re = /(?:第\s*)?\d+(?:\s*[-~–—至到]\s*\d+)?\s*周(?:\s*[（(][双单][）)])?/g;
-  for (const m of line.matchAll(re)) parts.push(m[0]);
+  for (const m of norm.matchAll(re)) parts.push(m[0]);
   // 独立的「双周/单周/隔周」修饰
-  if (/双周|隔周|[（(]双[）)]/.test(line) && !parts.some((p) => /[（(]双[）)]|双周/.test(p))) parts.push('双周');
-  if (/单周|[（(]单[）)]/.test(line) && !parts.some((p) => /[（(]单[）)]|单周/.test(p))) parts.push('单周');
+  if (/双周|隔周|[（(]双[）)]/.test(norm) && !parts.some((p) => /[（(]双[）)]|双周/.test(p))) parts.push('双周');
+  if (/单周|[（(]单[）)]/.test(norm) && !parts.some((p) => /[（(]单[）)]|单周/.test(p))) parts.push('单周');
   return parts.join(',');
 }
 
@@ -151,6 +160,7 @@ function extractTitle(line: string, tokens: string[]): string {
   for (const tk of tokens) work = work.split(tk).join(' ');
   return work
     .replace(/[（(]\s*\d+\s*[-~–—至到]\s*\d+\s*节\s*[）)]/g, ' ')
+    .replace(/第?\s*\d+\s*周\s*[-~–—至到]\s*\d+\s*周/g, ' ') // 第7周-18周（周字重复的范围）
     .replace(/第\s*\d+\s*周/g, ' ')
     .replace(/(?:星期|周|礼拜)\s*[一二三四五六日天1-7]/g, ' ')
     .replace(/[@＠]\s*[^\s,，;；]+/g, ' ')
@@ -186,17 +196,27 @@ export function parsePeriodTimes(text: string): Record<number, PeriodSlot> | nul
   return Object.keys(out).length > 0 ? out : null;
 }
 
-/** 从用户课表整理出的结构化示例（覆盖全部周次规则与节次类型） */
-export const SCHEDULE_SAMPLE = `周一 1-2节 4-18周(双) 思政课-德法 @学思楼1-A403
-周一 3-4节 3-18周 思政课-德法 @学思楼1-A403
-周二 3-4节 7-14周 劳动教育 @学思楼3-C502
-周三 1-2节 1-17周 摄影摄像基础 @学思楼1-B501
-周四 1-2节 2-17周 大学英语 @学思楼3-C501
-周五 5-6节 第7周 视听语言 @学思楼1-C410
-周五 7-8节 3-5周,8-18周 视听语言 @学思楼1-C410
+/** 从用户课表图片逐格提取的真实结构化课表（第1/2页 + 晚间跨页），可直接导入 */
+export const SCHEDULE_SAMPLE = `周一 3-4节 1-18周 思政课-德法 @学思楼1-A403
 周一 5-6节 4-6周,8-11周 职业生涯与发展规划 @学思楼2-C410
-周二 7-8节 2-17周 体育-排球 @综合馆排球场
-周四 11-12节 2-17周 人工智能导论 @知行楼1-314`;
+周一 7-8节 第7周 形势与政策 @学思楼1-A403
+周一 9-10节 第7周 职业生涯与发展规划 @学思楼1-C410
+周二 1-2节 1-18周(双) 思政课-德法 @学思楼1-A403
+周二 3-4节 7-14周 劳动教育 @学思楼3-C502
+周二 3-6节 2-17周 大学语文 @学思楼3-C503
+周二 7-8节 1-17周 体育-排球 @综合馆篮球场
+周二 11-12节 2-17周 职业生涯与发展规划 @学思楼2-C410
+周三 1-2节 2-17周 摄影摄像基础 @摄影摄像实验室1-B501
+周三 9-10节 2-17周 视听语言 @学思楼1-C410
+周三 11-12节 2-17周 视听语言 @学思楼1-C410
+周四 3-4节 1-18周 思政课-德法 @学思楼1-B401
+周四 5-6节 2-17周 大学英语 @学思楼1-C501
+周四 7-10节 1-17周 画面设计基础 @学思楼1-C501
+周五 1-2节 1-17周 大学英语 @学思楼1-C502
+周五 5-6节 第6周,第7周 视听语言 @学思楼1-C410
+周五 7-8节 第7周-18周 视听语言 @学思楼1-C410
+周五 7-8节 第7周 形势与政策 @学思楼1-A403
+周五 11-12节 2-17周 人工智能导论 @学思楼1-314`;
 
 /**
  * 把结构化课程表文本解析为候选事件（每门课 × 每个周次 = 一条候选）。
