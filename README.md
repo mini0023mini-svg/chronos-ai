@@ -209,7 +209,7 @@ Phase 2 已写好全部 Supabase 集成代码（Auth / RLS 数据服务 / profil
 
 演示模式（无需后端）：
 
-- [ ] `npm install`、`npm run typecheck`、`npm run lint`、`npm test`（42 用例）、`npm run build` 全绿
+- [ ] `npm install`、`npm run typecheck`、`npm run lint`、`npm test`（62 用例）、`npm run build` 全绿
 - [ ] **测试覆盖**：timezone / recurrence / deadline / errors / errorMessages / importParser / assistantEngine / planningEngine / notification / syncBus 均有断言
 - [ ] `npm run dev` 打开后进入登录页，点「演示登录」进入应用
 - [ ] **Calendar**：点「新建日程」创建事件，含标题/起止时间/分类/地点/备注
@@ -230,6 +230,9 @@ Phase 2 已写好全部 Supabase 集成代码（Auth / RLS 数据服务 / profil
 - [ ] **AI Import**：识别结果带置信度与「待确认 / 缺日期 / 冲突 / 疑似重复」标记；可改标题、补日期
 - [ ] **AI Import**：勾选条目→「确认写入」，日历/任务/截止页出现对应新数据；缺日期项被跳过
 - [ ] **AI Import**：上传 TXT/DOCX/XLSX/PDF 可提取文字并识别；上传 JPG/PNG 由本地 OCR（tesseract.js，免费无密钥）识别中文，按钮显示「加载识别引擎/中文包/识别中 X%」进度；首次需联网下载约 2MB 中文包，离线或识别失败时降级为手动输入提示（不报错瘫痪）
+- [ ] **课程表导入**：切到「课程表导入」→ 填「第2周周一」锚点（如 2026-09-07）→「填入课表示例」→「生成课程日程」，预览按学期周次展开为具体日期的课程事件（示例 119 节）；点「确认写入」后日历出现对应上课时段
+- [ ] **课程表导入**：周次规则生效——`1-18周`每周、`1-18周(双)`仅偶周、`第6周`仅一次、`4-6周,8-11周`分段；节次按作息时间表映射（3-4节=10:10-11:35、11-12节=19:50-21:10）；作息时间表可编辑
+- [ ] **课程表导入**：上传课程表图片，OCR 提取文字填入文本框作参考（表格列对应需按每行一节课整理后再解析）
 - [ ] **AI Assistant**：点快捷指令「今天安排 / 查空闲」得到日程与空闲时段回答（本地引擎，无需 AI 网关）
 - [ ] **AI Assistant**：输入「明天 14:00-15:00 和张三开会」，生成带「确认写入」卡片的待确认操作，**此时日历无变化**；点确认后日历出现该日程
 - [ ] **AI Assistant**：输入「创建任务：买牛奶」/「提醒我周五前交报告」，确认后任务/截止页出现对应数据
