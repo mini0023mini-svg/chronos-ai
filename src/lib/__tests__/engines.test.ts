@@ -4,6 +4,7 @@ import { runLocalAssistant } from '@/lib/assistantEngine';
 import { rankTasks, buildPlan } from '@/lib/planningEngine';
 import { scanDueItems } from '@/lib/notification';
 import { formatInZone } from '@/lib/timezone';
+import { cleanOcrText } from '@/lib/ocr';
 import { makeContext, makeEvent, makeTask, makeDeadline } from '@/test/factories';
 
 const parseOpts = { now: new Date('2026-11-18T02:00:00.000Z'), timezone: 'Asia/Singapore' };
@@ -160,5 +161,20 @@ describe('notification.scanDueItems', () => {
 
   it('dueLabel 使用用户时区格式化', () => {
     expect(formatInZone('2026-11-18T02:20:00.000Z', 'HH:mm', 'Asia/Singapore')).toBe('10:20');
+  });
+});
+
+describe('ocr.cleanOcrText', () => {
+  it('合并汉字之间的多余空格', () => {
+    expect(cleanOcrText('上 线 门槛')).toBe('上线门槛');
+  });
+
+  it('合并汉字与数字之间的空格，保留日期时间紧凑', () => {
+    expect(cleanOcrText('每 周 一 09:00 高 等 数 学')).toBe('每周一09:00高等数学');
+    expect(cleanOcrText('截止 11/30 提交 期末 论文')).toBe('截止11/30提交期末论文');
+  });
+
+  it('保留英文单词间空格与换行', () => {
+    expect(cleanOcrText('Team Meeting 14:00 线上\n周 五 开 会')).toBe('Team Meeting 14:00线上\n周五开会');
   });
 });

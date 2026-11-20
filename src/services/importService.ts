@@ -7,6 +7,7 @@ import { makeId } from '@/lib/utils';
 import { dataService, aiService } from './index';
 import { calendarService } from './calendarService';
 import { annotateRisks, parseLocalText, type ImportCandidate } from '@/lib/importParser';
+import { recognizeImage, type OcrProgress } from '@/lib/ocr';
 import type { RecurrenceSpec } from '@/lib/recurrence';
 
 export type { ImportCandidate } from '@/lib/importParser';
@@ -40,15 +41,23 @@ function isImage(source: ImportSourceType): boolean {
  * - TXT：File.text()
  * - XLSX / DOCX：用免费库在浏览器本地解析（xlsx / mammoth）
  * - PDF：pdfjs-dist 本地抽取文字
- * - 图片：本地无 OCR 能力，返回空并给出降级提示（不抛错，UI 引导手动录入）
+ * - 图片：本地 OCR（tesseract.js）识别中文；失败时返回空并给出手动输入降级提示（不抛错瘫痪）
  */
-export async function extractText(file: File): Promise<Result<{ text: string; notice?: string }>> {
+export async function extractText(
+  file: File,
+  onProgress?: (p: OcrProgress) => void,
+): Promise<Result<{ text: string; notice?: string }>> {
   const source = sourceTypeOf(file);
   try {
     if (isImage(source)) {
+      const ocr = await recognizeImage(file, onProgress);
+      if (ocr.ok && ocr.data.text) {
+        return ok({ text: ocr.data.text });
+      }
+      // OCR 失败或空结果 → 降级为手动输入提示，不中断导入流程
       return ok({
         text: '',
-        notice: '图片识别需要 AI 网关；当前不可用，请在文本框手动输入内容后识别（AI 不可用不影响导入流程）。',
+        notice: '图片文字识别未成功（可能需要联网下载识别包）；请在文本框手动输入内容后识别（不影响导入流程）。',
       });
     }
     if (source === 'txt') {
@@ -134,6 +143,7 @@ export async function parseImport(
   input: string | File,
   ctx: AiContext,
   existingTitles: string[],
+  onProgress?: (p: OcrProgress) => void,
 ): Promise<Result<ImportParseResult>> {
   let rawText = '';
   let notice: string | undefined;
@@ -141,7 +151,7 @@ export async function parseImport(
   if (typeof input === 'string') {
     rawText = input;
   } else {
-    const extracted = await extractText(input);
+    const extracted = await extractText(input, onProgress);
     if (!extracted.ok) return fail(extracted.error);
     rawText = extracted.data.text;
     notice = extracted.data.notice;

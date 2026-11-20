@@ -21,6 +21,7 @@ import {
   type ImportCandidate,
 } from '@/services/importService';
 import { detectConflicts } from '@/lib/recurrence';
+import type { OcrProgress } from '@/lib/ocr';
 import { formatInZone, fromZoneTime } from '@/lib/timezone';
 import type { I18nKey } from '@/i18n';
 import type { AiContext } from '@/types/api';
@@ -54,6 +55,7 @@ export default function AiImportPage() {
   const [source, setSource] = useState<'ai' | 'local' | null>(null);
   const [notice, setNotice] = useState<string | undefined>(undefined);
   const [parsing, setParsing] = useState(false);
+  const [ocrProgress, setOcrProgress] = useState<OcrProgress | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
   const [writing, setWriting] = useState(false);
   const [writeResult, setWriteResult] = useState<string | null>(null);
@@ -100,8 +102,9 @@ export default function AiImportPage() {
     setParseError(null);
     setWriteResult(null);
     setNotice(undefined);
+    setOcrProgress(null);
     try {
-      const result = await parseImport(input, buildCtx(), existingTitles);
+      const result = await parseImport(input, buildCtx(), existingTitles, setOcrProgress);
       if (!result.ok) {
         setParseError(errorText(result.error));
         setCandidates([]);
@@ -122,8 +125,17 @@ export default function AiImportPage() {
       setCandidates([]);
     } finally {
       setParsing(false);
+      setOcrProgress(null);
     }
   };
+
+  /** 解析按钮文案：图片识别时按 OCR 阶段显示进度，其余显示通用识别中 */
+  const parsingLabel = (() => {
+    if (!ocrProgress) return t('import.parsing');
+    if (ocrProgress.stage === 'loading-engine') return t('import.ocrEngine');
+    if (ocrProgress.stage === 'loading-language') return t('import.ocrLanguage');
+    return t('import.ocrRecognizing', { n: Math.round(ocrProgress.progress * 100) });
+  })();
 
   const toggle = (id: string) => {
     setSelected((prev) => {
@@ -262,7 +274,7 @@ export default function AiImportPage() {
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <Button variant="primary" onClick={() => void doParse()} disabled={parsing || (!file && !paste.trim())}>
-              {parsing ? <><RefreshCw className="mr-1.5 h-4 w-4 animate-spin" aria-hidden /> {t('import.parsing')}</> : <><Sparkles className="mr-1.5 h-4 w-4" aria-hidden /> {t('import.parse')}</>}
+              {parsing ? <><RefreshCw className="mr-1.5 h-4 w-4 animate-spin" aria-hidden /> {parsingLabel}</> : <><Sparkles className="mr-1.5 h-4 w-4" aria-hidden /> {t('import.parse')}</>}
             </Button>
             {notice && <span className="text-[11px] text-warning">{notice}</span>}
           </div>
