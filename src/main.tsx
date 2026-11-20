@@ -15,7 +15,8 @@ createRoot(rootEl).render(
 // PWA：仅生产环境注册 Service Worker（离线缓存 + 通知点击）
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').then((registration) => {
+    // BASE_URL 在 GitHub Pages 子路径部署时为 /chronos-ai/，本地开发为 /
+    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).then((registration) => {
       // 检测到新版本时通知旧 SW 让位，页面下次加载即用新缓存
       registration.onupdatefound = () => {
         const installing = registration.installing;

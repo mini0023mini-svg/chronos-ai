@@ -2,18 +2,25 @@
  * 离线优先的缓存策略 + 通知点击处理。
  * 安全约束：不缓存任何 API / Supabase 请求（避免 RLS 数据落入 SW 缓存）。
  */
-const CACHE_VERSION = 'chronos-ai-v8';
+const CACHE_VERSION = 'chronos-ai-v9';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const ASSET_CACHE = `${CACHE_VERSION}-assets`;
 
+// 从 SW 脚本自身 URL 推导部署前缀：站点根部署时为 ''，GitHub Pages 子路径时为 '/chronos-ai'
+// self.registration.scope 例如 https://user.github.io/chronos-ai/
+const BASE = new URL(self.registration.scope).pathname.replace(/\/$/, '');
+// 应用内路由为 HashRouter，页面 URL 形如 /chronos-ai/#/calendar，静态外壳始终位于 BASE 下
+const appUrl = (path) => `${BASE}${path}`;
+const HASH_HOME = `${BASE}/#/`;
+
 // 预缓存的应用外壳：离线时保证页面骨架可加载
 const APP_SHELL = [
-  '/',
-  '/index.html',
-  '/manifest.webmanifest',
-  '/favicon.svg',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png',
+  appUrl('/'),
+  appUrl('/index.html'),
+  appUrl('/manifest.webmanifest'),
+  appUrl('/favicon.svg'),
+  appUrl('/icons/icon-192.png'),
+  appUrl('/icons/icon-512.png'),
 ];
 
 self.addEventListener('install', (event) => {
@@ -59,12 +66,16 @@ async function navigationStrategy(request) {
     const response = await fetch(request);
     if (response && response.ok) {
       const cache = await caches.open(SHELL_CACHE);
-      cache.put('/index.html', response.clone());
+      cache.put(appUrl('/index.html'), response.clone());
     }
     return response;
   } catch {
     const cache = await caches.open(SHELL_CACHE);
-    return (await cache.match('/index.html')) || (await cache.match('/')) || Response.error();
+    return (
+      (await cache.match(appUrl('/index.html'))) ||
+      (await cache.match(appUrl('/'))) ||
+      Response.error()
+    );
   }
 }
 
@@ -90,7 +101,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(navigationStrategy(request));
     return;
   }
-  if (url.pathname.startsWith('/assets/') || /\.(js|css|png|svg|woff2?|ico|webmanifest)$/.test(url.pathname)) {
+  if (url.pathname.startsWith(`${BASE}/assets/`) || /\.(js|css|png|svg|woff2?|ico|webmanifest)$/.test(url.pathname)) {
     event.respondWith(assetStrategy(request));
   }
 });
@@ -98,7 +109,7 @@ self.addEventListener('fetch', (event) => {
 /** 通知点击：聚焦已打开页面，否则打开通知页 */
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const target = event.notification.data?.url || '/notifications';
+  const target = event.notification.data?.url || `${HASH_HOME}notifications`;
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
       for (const client of clients) {
@@ -124,10 +135,10 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(title, {
       body: data.body || '',
-      icon: '/icons/icon-192.png',
-      badge: '/favicon.svg',
+      icon: appUrl('/icons/icon-192.png'),
+      badge: appUrl('/favicon.svg'),
       tag: data.tag || 'chronos',
-      data: data.data || { url: '/notifications' },
+      data: data.data || { url: `${HASH_HOME}notifications` },
     }),
   );
 });

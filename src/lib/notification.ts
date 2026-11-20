@@ -76,10 +76,11 @@ export function showBrowserNotification(title: string, body: string, tag = 'chro
       void navigator.serviceWorker.ready.then((registration) => {
         registration.showNotification(title, {
           body,
-          icon: '/icons/icon-192.png',
-          badge: '/favicon.svg',
+          icon: `${import.meta.env.BASE_URL}icons/icon-192.png`,
+          badge: `${import.meta.env.BASE_URL}favicon.svg`,
           tag,
-          data: { url: '/notifications' },
+          // HashRouter + 子路径部署：通知点击跳回应用内通知页
+          data: { url: `${import.meta.env.BASE_URL}#/notifications` },
         });
       });
     } else {

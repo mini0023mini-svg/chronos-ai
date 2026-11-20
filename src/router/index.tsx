@@ -1,5 +1,5 @@
 import { lazy, Suspense, type ReactNode } from 'react';
-import { createBrowserRouter, Navigate, Outlet } from 'react-router-dom';
+import { createHashRouter, Navigate, Outlet } from 'react-router-dom';
 import { AppLayout } from '@/layouts/AppLayout';
 import { LoadingState } from '@/components/ui/LoadingState';
 import { useAuth } from '@/hooks/useAuth';
@@ -36,7 +36,8 @@ function GuestRoute() {
   return withSuspense(<LoginPage />);
 }
 
-export const router = createBrowserRouter([
+// GitHub Pages 为纯静态托管，无 history 回退能力；HashRouter 兼容子路径部署且无需服务端 rewrite
+export const router = createHashRouter([
   { path: '/login', element: <GuestRoute /> },
   {
     element: <ProtectedRoute />,

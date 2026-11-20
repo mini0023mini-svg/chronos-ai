@@ -5,11 +5,11 @@
 > **当前状态：Phase 9 完成 — 9 个 Phase 全部交付，V1.0 达成。**
 > 测试：Vitest 42 个用例覆盖全部纯函数引擎与总线/错误映射，CI 自动跑 typecheck→lint→test→build。
 > 错误处理：所有错误码按中英 i18n 展示用户可读文案（不再暴露英文技术信息），ErrorBoundary 路由切换自动恢复。
-> 部署：仓库含 `vercel.json`（SPA fallback + PWA 缓存头）与完整部署文档，Supabase 上线检查清单齐备。
+> 部署：主路径为 GitHub Pages（含 `deploy-pages.yml` 自动部署，HashRouter 适配子路径）；Vercel 为可选（`vercel.json`）。Supabase 上线检查清单齐备。
 > Phase 3–8 的日历/任务/重复/截止/软删除/时区/AI Import/AI Assistant/Smart Planning/PWA 离线/实时同步/通知全部可用。
 > **本地规则引擎**为 AI 网关未部署时的降级核心（离线、免费），网关部署后自动优先使用 AI。
 > 未配置 Supabase 密钥时自动降级到 mock 演示模式（localStorage 持久化），网站始终可运行。
-> 实际创建 GitHub 仓库 / Supabase 项目 / Vercel 部署需用户账号授权，本项目已备好全部配置与文档。
+> 实际启用 GitHub Pages / 创建 Supabase 项目 / 部署 Vercel 需用户账号授权，本项目已备好全部配置与文档。
 
 ---
 
@@ -162,31 +162,46 @@ Phase 2 已写好全部 Supabase 集成代码（Auth / RLS 数据服务 / profil
 
 ---
 
-## 部署到 Vercel（Phase 9）
+## 部署（GitHub Pages 为主，Vercel 可选）
 
-> 仓库已包含 `vercel.json`（SPA fallback rewrite + PWA 缓存头）与 GitHub Actions CI（`typecheck → lint → test → build`）。
-> 以下步骤需要你自己的 GitHub / Vercel / Supabase 账号授权，无法代做。
+> 主部署路径为 **GitHub Pages**：复用已有 GitHub 账号，免费、自动 HTTPS，无需注册第三方平台或手机号验证。
+> 仓库已包含 `.github/workflows/deploy-pages.yml`（自动构建并部署）与 `ci.yml`（`typecheck → lint → test → build`）。
+> 以下步骤需要你自己的 GitHub / Supabase 账号授权，无法代做。
 
-1. **推送到 GitHub**：在 GitHub 新建空仓库，本地执行
+### A. GitHub Pages 部署（推荐）
+
+应用为纯静态前端，采用 **HashRouter**（URL 形如 `https://<账号>.github.io/chronos-ai/#/calendar`），
+因此无需服务端 SPA 回退；Vite 生产 `base` 设为 `/chronos-ai/`，资源与 Service Worker 均按子路径解析。
+
+1. **推送代码**：在 GitHub 新建名为 `chronos-ai` 的仓库（若仓库名不同，需同步修改 `vite.config.ts` 的 `base`），本地执行
    ```bash
-   git remote add origin https://github.com/<你的账号>/<仓库名>.git
+   git remote add origin https://github.com/<你的账号>/chronos-ai.git
    git branch -M main && git push -u origin main
    ```
-   CI 会自动跑 typecheck / lint / test / build，绿了才可合并。
-2. **导入 Vercel**：vercel.com → Add New → Project → Import 该仓库。框架预设 Vite，`vercel.json` 会自动生效：
-   - SPA 路由刷新 fallback 到 `index.html`；
-   - `sw.js` 设为 `must-revalidate`（保证离线策略可更新）、`manifest.webmanifest` 短缓存、`/assets/*` 长缓存 immutable。
-3. **配置环境变量**：Project Settings → Environment Variables 只填 `VITE_` 公开变量（见 `.env.example`）。
-   - 演示模式：只需 `VITE_USE_MOCK=true`，无需任何密钥即可上线可体验版本。
-   - 真实后端：填 `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` 并设 `VITE_USE_MOCK=false`。
-4. **服务端密钥**：`GEMINI_API_KEY` / `SUPABASE_SERVICE_ROLE_KEY` 只放 Supabase Edge Function secrets 或 Vercel Serverless 环境变量，**绝不写入前端、绝不提交 GitHub**。
-5. **AI 网关**：Phase 5–7 的 AI 能力默认走本地规则引擎（免费、离线）。部署 Edge Function（`ai-chat` / `ai-import` 等）并配置 `VITE_AI_GATEWAY_URL` 后自动优先使用 AI，失败静默降级本地。
-6. **Supabase 上线检查清单**：
-   - 执行 `supabase/migrations/0001_init.sql` 建表；
-   - 确认 11 张表 RLS 已启用且策略按 `auth.uid()` 隔离；
-   - 确认 `profiles` 自动创建触发器、6 个默认分类种子已生效；
-   - Storage bucket `imports` 设为私有（仅本人可读写）。
-7. **PWA / 域名**：部署后 HTTPS 自动就绪（PWA 安装前提）；自定义域名在 Vercel → Settings → Domains 添加，manifest 的 `start_url` 用相对路径 `/` 无需改动。
+2. **启用 Pages**：GitHub 仓库 → Settings → Pages → Build and deployment，
+   Source 选择 **GitHub Actions**。推送会触发 `deploy-pages.yml`：四关卡验证通过后自动构建并发布。
+3. **查看网址**：部署完成后，Actions 页 `deploy` 步骤输出 `page_url`，
+   或仓库 Settings → Pages 顶部显示 `https://<你的账号>.github.io/chronos-ai/`。
+4. **PWA 已就绪**：HTTPS 自动启用；manifest 使用相对路径、`sw.js` 从 scope 推导子路径，离线与安装均正常。
+5. **配置后端（可选）**：如需真实登录与云端持久化，见下方「Supabase 接入指引」；
+   未在 GitHub Actions 配置 `VITE_` 环境变量时默认演示模式，无需任何密钥。
+
+### B. Vercel 部署（可选替代）
+
+> 若你更偏好 Vercel，仓库同样兼容：`vercel.json` 含 SPA fallback rewrite 与 PWA 缓存头。
+> 该路径需注册 Vercel 账号（部分注册流程要求手机号验证）。
+
+1. vercel.com → Add New → Project → Import 仓库，框架预设 Vite，`vercel.json` 自动生效。
+2. Project Settings → Environment Variables 只填 `VITE_` 公开变量；演示模式可留空。
+3. 服务端密钥 `GEMINI_API_KEY` / `SUPABASE_SERVICE_ROLE_KEY` 只放服务端环境，**绝不写入前端或提交 GitHub**。
+4. 自定义域名在 Vercel → Settings → Domains 添加。
+
+### C. 通用上线检查清单
+
+- **AI 网关**：Phase 5–7 的 AI 能力由本地规则引擎提供（免费、离线），**无需部署网关**；
+  项目当前未含 Edge Function 源码，README 早期提到的 `ai-chat` / `ai-import` 为预留描述，非现役步骤。
+- **Supabase（可选）**：执行 `supabase/migrations/0001_init.sql`；确认 11 张表 RLS 按 `auth.uid()` 隔离；
+  `profiles` 触发器与 6 个默认分类种子生效；Storage bucket `imports` 设为私有。
 
 ---
 
