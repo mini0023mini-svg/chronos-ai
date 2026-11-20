@@ -5,7 +5,7 @@ import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import { useTheme } from '@/hooks/useTheme';
-import { DEFAULT_TIMEZONE } from '@/lib/timezone';
+import { DEFAULT_TIMEZONE, formatInZone } from '@/lib/timezone';
 
 export type CalendarView = 'month' | 'week' | 'day';
 
@@ -18,6 +18,14 @@ export interface CalendarShellProps {
   onDateClick?: (date: string) => void;
 }
 
+/** 取 Date 的本地日历日期（yyyy-MM-dd），与 timeZone="local" 的显示保持一致 */
+function localDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 /** 按分类 id 映射的柔和配色（与全局主色协调） */
 const colorByCategory: Record<string, string> = {
   'cat-1': '#829CC4',
@@ -28,7 +36,17 @@ const colorByCategory: Record<string, string> = {
   'cat-6': '#8B9099',
 };
 
-function toEventInput(event: CalendarEvent): EventInput {
+/**
+ * 把 UTC 时刻投影为「用户偏好时区的墙上时间」字符串（不带时区后缀）。
+ * FullCalendar 对无时区后缀的字符串不做任何偏移，直接按该钟点显示，
+ * 从而避免 timeZone 解析差异导致事件整体±N小时的问题。
+ */
+function wallTime(utcIso: string | null | undefined, timezone: string): string | undefined {
+  if (!utcIso) return undefined;
+  return formatInZone(utcIso, "yyyy-MM-dd'T'HH:mm:ss", timezone);
+}
+
+export function toEventInput(event: CalendarEvent, timezone: string): EventInput {
   if (event.is_cancelled) {
     return { id: event.id, title: event.title, start: event.occurrence_date ?? event.start_at, display: 'none' };
   }
@@ -36,8 +54,9 @@ function toEventInput(event: CalendarEvent): EventInput {
   return {
     id: event.id,
     title: event.title,
-    start: event.start_at,
-    end: event.end_at,
+    // 全天事件保留纯日期；定时事件投影为墙上时间，确保显示钟点 == 用户设置的上课钟点
+    start: event.all_day ? event.start_at.slice(0, 10) : wallTime(event.start_at, timezone) ?? event.start_at,
+    end: event.all_day ? undefined : wallTime(event.end_at, timezone) ?? undefined,
     allDay: event.all_day,
     backgroundColor: color,
     borderColor: 'transparent',
@@ -62,8 +81,9 @@ export function CalendarShell({ events, view, timezone = DEFAULT_TIMEZONE, onEve
         initialView={calendarView}
         key={calendarView}
         themeSystem="standard"
-        timeZone={timezone}
-        events={events.map(toEventInput)}
+        // 事件 start/end 已投影为用户时区的墙上时间，这里按本地显示即可，避免二次偏移
+        timeZone="local"
+        events={events.map((e) => toEventInput(e, timezone))}
         headerToolbar={{ left: 'prev,next today', center: 'title', right: '' }}
         height="auto"
         contentHeight={620}
@@ -80,8 +100,8 @@ export function CalendarShell({ events, view, timezone = DEFAULT_TIMEZONE, onEve
         eventDrop={(info) => {
           const found = events.find((e) => e.id === info.event.id);
           if (!found) return;
-          const targetDate = (info.event.start ?? new Date()).toISOString().slice(0, 10);
-          const sourceDate = (info.oldEvent.start ?? new Date()).toISOString().slice(0, 10);
+          const targetDate = localDateStr(info.event.start ?? new Date());
+          const sourceDate = localDateStr(info.oldEvent.start ?? new Date());
           if (targetDate === sourceDate) return;
           onEventDrop?.(found, targetDate);
         }}
