@@ -10,3 +10,7 @@ npm-debug.log*
 .vscode/
 *.tsbuildinfo
 coverage/
+
+# OCR 语言包（运行时从 CDN 下载，不入库）
+*.traineddata
+*.traineddata.gz
