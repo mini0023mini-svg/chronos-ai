@@ -117,6 +117,14 @@ describe('scheduleParser.parseSchedule 端到端', () => {
       expect(candidates[i - 1].start_at! <= candidates[i].start_at!).toBe(true);
     }
   });
+
+  it('大学语文统一为 14:00-15:25（第 5-6 节）', () => {
+    const candidates = parseSchedule(SCHEDULE_SAMPLE, { week2Monday: WEEK2_MONDAY, timezone: TZ });
+    const chinese = candidates.filter((c) => c.title.startsWith('大学语文'));
+    expect(chinese.length).toBeGreaterThan(0);
+    expect(chinese.every((c) => formatInZone(c.start_at!, 'HH:mm', TZ) === '14:00')).toBe(true);
+    expect(chinese.every((c) => formatInZone(c.end_at!, 'HH:mm', TZ) === '15:25')).toBe(true);
+  });
 });
 
 describe('scheduleParser 周字重复的范围写法', () => {

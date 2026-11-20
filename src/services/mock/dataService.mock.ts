@@ -3,7 +3,8 @@ import { ok, fail } from '@/types/api';
 import { Errors, AppError } from '@/lib/errors';
 import { makeId, safeJsonParse } from '@/lib/utils';
 import { notifyDataChanged, type SyncScope } from '@/lib/syncBus';
-import type { BaseEntity } from '@/types/models';
+import type { BaseEntity, CalendarEvent } from '@/types/models';
+import { DEFAULT_TIMEZONE, formatInZone, fromZoneTime, isValidTimeZone } from '@/lib/timezone';
 import type { IDataService } from '../interfaces';
 import type { ImportSourceType } from '@/types/enums';
 import {
@@ -48,6 +49,36 @@ function purgeLegacyMath(): void {
   }
 }
 purgeLegacyMath();
+
+/**
+ * 一次性迁移：用户要求「大学语文」统一为 14:00-15:25（对应第 5-6 节）。
+ * 旧课表按 3-6 节导入（10:10 起），已固化的事件按事件自带时区重建起止时刻，只执行一次。
+ */
+const CHINESE_TIME_KEY = 'chronos.mock.fixChineseTime.v1';
+function fixChineseClassTime(): void {
+  try {
+    if (localStorage.getItem(CHINESE_TIME_KEY)) return;
+    const key = 'chronos.mock.events';
+    const rows = safeJsonParse<CalendarEvent[] | null>(localStorage.getItem(key), null);
+    if (rows) {
+      const updated = rows.map((row) => {
+        if (row.title !== '大学语文' && !row.title?.startsWith('大学语文（')) return row;
+        const tz = isValidTimeZone(row.timezone) ? row.timezone : DEFAULT_TIMEZONE;
+        const date = formatInZone(row.start_at, 'yyyy-MM-dd', tz);
+        const startAt = fromZoneTime(`${date}T14:00:00`, tz).toISOString();
+        const endAt = fromZoneTime(`${date}T15:25:00`, tz).toISOString();
+        if (row.start_at === startAt && row.end_at === endAt) return row;
+        return { ...row, start_at: startAt, end_at: endAt, updated_at: new Date().toISOString() };
+      });
+      const changed = updated.some((row, i) => row !== rows[i]);
+      if (changed) localStorage.setItem(key, JSON.stringify(updated));
+    }
+    localStorage.setItem(CHINESE_TIME_KEY, '1');
+  } catch {
+    /* localStorage 不可用时跳过，不影响当前会话 */
+  }
+}
+fixChineseClassTime();
 
 /** 表名 → 同步作用域：只有核心表触发 UI 刷新，其余归为 all */
 const SYNC_SCOPE: Record<string, SyncScope> = {
