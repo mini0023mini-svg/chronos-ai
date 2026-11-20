@@ -21,7 +21,11 @@ import {
   type ImportCandidate,
 } from '@/services/importService';
 import { detectConflicts } from '@/lib/recurrence';
-import type { OcrProgress } from '@/lib/ocr';
+import {
+  parseSchedule, SCHEDULE_SAMPLE, DEFAULT_PERIOD_TIMES,
+  periodTimesToText, parsePeriodTimes,
+} from '@/lib/scheduleParser';
+import { recognizeImage, type OcrProgress } from '@/lib/ocr';
 import { formatInZone, fromZoneTime } from '@/lib/timezone';
 import type { I18nKey } from '@/i18n';
 import type { AiContext } from '@/types/api';
@@ -60,6 +64,13 @@ export default function AiImportPage() {
   const [writing, setWriting] = useState(false);
   const [writeResult, setWriteResult] = useState<string | null>(null);
 
+  // 课程表模式
+  const [mode, setMode] = useState<'general' | 'schedule'>('general');
+  const [week2Monday, setWeek2Monday] = useState('2026-09-07');
+  const [periodTableText, setPeriodTableText] = useState(() => periodTimesToText(DEFAULT_PERIOD_TIMES));
+  const [scheduleText, setScheduleText] = useState('');
+  const [scheduleImage, setScheduleImage] = useState<File | null>(null);
+
   const eventsState = useAsync(() => dataService.events.list(), []);
   const tasksState = useAsync(() => dataService.tasks.list(), []);
   const deadlinesState = useAsync(() => dataService.deadlines.list(), []);
@@ -92,6 +103,69 @@ export default function AiImportPage() {
     if (picked) {
       setPaste('');
       setWriteResult(null);
+    }
+  };
+
+  /** 课程表图片 OCR：提取文字填入文本框作为整理参考 */
+  const onScheduleImage = async (e: ChangeEvent<HTMLInputElement>) => {
+    const picked = e.target.files?.[0] ?? null;
+    if (!picked) return;
+    setScheduleImage(picked);
+    setParsing(true);
+    setParseError(null);
+    setOcrProgress(null);
+    setNotice(undefined);
+    try {
+      const result = await recognizeImage(picked, setOcrProgress);
+      if (!result.ok) {
+        setParseError(errorText(result.error));
+        return;
+      }
+      setScheduleText((prev) => (prev ? `${prev}\n` : '') + result.data.text);
+      setNotice(t('import.scheduleOcrHint'));
+    } catch (err) {
+      setParseError(errorText(err));
+    } finally {
+      setParsing(false);
+      setOcrProgress(null);
+    }
+  };
+
+  /** 课程表解析：按锚点与作息时间表展开为具体课程事件，复用候选预览/写入流程 */
+  const doScheduleParse = () => {
+    if (!scheduleText.trim()) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(week2Monday)) {
+      setParseError(t('import.week2MondayHint'));
+      return;
+    }
+    setParsing(true);
+    setParseError(null);
+    setWriteResult(null);
+    setNotice(undefined);
+    try {
+      const times = parsePeriodTimes(periodTableText) ?? DEFAULT_PERIOD_TIMES;
+      if (!parsePeriodTimes(periodTableText)) setNotice(t('import.scheduleInvalidPeriod'));
+      const candidates = parseSchedule(scheduleText, { week2Monday, timezone, periodTimes: times });
+      if (candidates.length === 0) {
+        setParseError(t('import.empty'));
+        setCandidates([]);
+        return;
+      }
+      const withConflicts = markConflicts(candidates, (c) =>
+        detectConflicts(
+          { start_at: c.start_at as string, end_at: c.end_at as string, all_day: c.all_day ?? false },
+          eventsState.data ?? [],
+        ).map((ev) => ev.title),
+      );
+      setCandidates(withConflicts);
+      setSelected(new Set(withConflicts.map((c) => c.id)));
+      setSource('local');
+      setNotice((prev) => `${t('import.scheduleResult', { n: candidates.length })}${prev ? ` · ${prev}` : ''}`);
+    } catch (err) {
+      setParseError(errorText(err));
+      setCandidates([]);
+    } finally {
+      setParsing(false);
     }
   };
 
@@ -229,56 +303,137 @@ export default function AiImportPage() {
       <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-primary/30 bg-primary/8 p-3">
         <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
         <p className="text-xs leading-relaxed text-muted">
-          {source === 'ai' ? t('import.aiMode') : t('import.localModeHint')}
+          {mode === 'schedule'
+            ? t('import.mode.scheduleHint')
+            : source === 'ai' ? t('import.aiMode') : t('import.localModeHint')}
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <Card>
-          <label
-            className="flex min-h-[140px] cursor-pointer flex-col items-center justify-center gap-3 rounded-card border-2 border-dashed text-center transition hover:bg-primary/5"
-            style={{ borderColor: 'var(--border)' }}
-          >
-            <UploadCloud className="h-8 w-8 text-primary" aria-hidden />
-            <span className="text-sm font-medium text-ink">{t('import.dropzone')}</span>
-            <span className="text-[11px] text-muted">{t('import.formats')}</span>
-            <input type="file" accept=".jpg,.jpeg,.png,.pdf,.docx,.xlsx,.txt" onChange={onFile} className="hidden" />
-            {file && (
-              <span className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-primary/12 px-3 py-1 text-xs text-primary">
-                <FileText className="h-3.5 w-3.5" aria-hidden /> {file.name} ({sourceTypeOf(file).toUpperCase()})
-                <button type="button" onClick={() => setFile(null)} aria-label="remove" className="ml-1"><X className="h-3 w-3" /></button>
-              </span>
+      <div className="mb-4 inline-flex rounded-xl border p-1" style={{ borderColor: 'var(--border)' }} role="tablist">
+        {(['general', 'schedule'] as const).map((m) => (
+          <button
+            key={m}
+            type="button"
+            role="tab"
+            aria-selected={mode === m}
+            onClick={() => { setMode(m); setCandidates([]); setSelected(new Set()); setNotice(undefined); setParseError(null); setWriteResult(null); }}
+            className={cn(
+              'rounded-lg px-4 py-1.5 text-xs font-medium transition',
+              mode === m ? 'bg-primary text-white' : 'text-muted hover:text-ink',
             )}
-          </label>
-
-          <div className="my-4 flex items-center gap-3 text-[11px] text-muted">
-            <span className="h-px flex-1" style={{ background: 'var(--border)' }} />
-            OR
-            <span className="h-px flex-1" style={{ background: 'var(--border)' }} />
-          </div>
-
-          <div className="mb-2 flex items-center justify-between">
-            <textarea
-              value={paste}
-              onChange={(e) => { setPaste(e.target.value); if (e.target.value) setFile(null); }}
-              placeholder={t('import.paste')}
-              rows={6}
-              className="w-full resize-y rounded-xl border bg-card p-3 text-sm text-ink placeholder:text-muted/70 focus:outline focus:outline-2 focus:outline-primary/50"
-              style={{ borderColor: 'var(--border)' }}
-              aria-label={t('import.paste')}
-            />
-          </div>
-          <button type="button" onClick={() => { setPaste(SAMPLE); setFile(null); }} className="text-[11px] text-primary hover:underline">
-            {t('import.sample')}
+          >
+            {t(m === 'general' ? 'import.mode.general' : 'import.mode.schedule')}
           </button>
+        ))}
+      </div>
 
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <Button variant="primary" onClick={() => void doParse()} disabled={parsing || (!file && !paste.trim())}>
-              {parsing ? <><RefreshCw className="mr-1.5 h-4 w-4 animate-spin" aria-hidden /> {parsingLabel}</> : <><Sparkles className="mr-1.5 h-4 w-4" aria-hidden /> {t('import.parse')}</>}
-            </Button>
-            {notice && <span className="text-[11px] text-warning">{notice}</span>}
-          </div>
-        </Card>
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        {mode === 'general' ? (
+          <Card>
+            <label
+              className="flex min-h-[140px] cursor-pointer flex-col items-center justify-center gap-3 rounded-card border-2 border-dashed text-center transition hover:bg-primary/5"
+              style={{ borderColor: 'var(--border)' }}
+            >
+              <UploadCloud className="h-8 w-8 text-primary" aria-hidden />
+              <span className="text-sm font-medium text-ink">{t('import.dropzone')}</span>
+              <span className="text-[11px] text-muted">{t('import.formats')}</span>
+              <input type="file" accept=".jpg,.jpeg,.png,.pdf,.docx,.xlsx,.txt" onChange={onFile} className="hidden" />
+              {file && (
+                <span className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-primary/12 px-3 py-1 text-xs text-primary">
+                  <FileText className="h-3.5 w-3.5" aria-hidden /> {file.name} ({sourceTypeOf(file).toUpperCase()})
+                  <button type="button" onClick={() => setFile(null)} aria-label="remove" className="ml-1"><X className="h-3 w-3" /></button>
+                </span>
+              )}
+            </label>
+
+            <div className="my-4 flex items-center gap-3 text-[11px] text-muted">
+              <span className="h-px flex-1" style={{ background: 'var(--border)' }} />
+              OR
+              <span className="h-px flex-1" style={{ background: 'var(--border)' }} />
+            </div>
+
+            <div className="mb-2 flex items-center justify-between">
+              <textarea
+                value={paste}
+                onChange={(e) => { setPaste(e.target.value); if (e.target.value) setFile(null); }}
+                placeholder={t('import.paste')}
+                rows={6}
+                className="w-full resize-y rounded-xl border bg-card p-3 text-sm text-ink placeholder:text-muted/70 focus:outline focus:outline-2 focus:outline-primary/50"
+                style={{ borderColor: 'var(--border)' }}
+                aria-label={t('import.paste')}
+              />
+            </div>
+            <button type="button" onClick={() => { setPaste(SAMPLE); setFile(null); }} className="text-[11px] text-primary hover:underline">
+              {t('import.sample')}
+            </button>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Button variant="primary" onClick={() => void doParse()} disabled={parsing || (!file && !paste.trim())}>
+                {parsing ? <><RefreshCw className="mr-1.5 h-4 w-4 animate-spin" aria-hidden /> {parsingLabel}</> : <><Sparkles className="mr-1.5 h-4 w-4" aria-hidden /> {t('import.parse')}</>}
+              </Button>
+              {notice && <span className="text-[11px] text-warning">{notice}</span>}
+            </div>
+          </Card>
+        ) : (
+          <Card>
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-ink">{t('import.week2Monday')}</label>
+                <input
+                  type="date"
+                  value={week2Monday}
+                  onChange={(e) => setWeek2Monday(e.target.value)}
+                  className="w-full rounded-lg border bg-card px-3 py-2 text-sm text-ink"
+                  style={{ borderColor: 'var(--border)' }}
+                />
+                <p className="mt-1 text-[10px] text-muted">{t('import.week2MondayHint')}</p>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-ink">{t('import.periodTable')}</label>
+                <textarea
+                  value={periodTableText}
+                  onChange={(e) => setPeriodTableText(e.target.value)}
+                  rows={4}
+                  className="w-full resize-y rounded-lg border bg-card p-2 font-mono text-[11px] text-ink"
+                  style={{ borderColor: 'var(--border)' }}
+                />
+                <p className="mt-1 text-[10px] text-muted">{t('import.periodTableHint')}</p>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-ink">{t('import.schedulePaste')}</label>
+                <textarea
+                  value={scheduleText}
+                  onChange={(e) => setScheduleText(e.target.value)}
+                  placeholder="周一 1-2节 4-18周(双) 思政课-德法 @学思楼1-A403"
+                  rows={7}
+                  className="w-full resize-y rounded-xl border bg-card p-3 text-sm text-ink placeholder:text-muted/70 focus:outline focus:outline-2 focus:outline-primary/50"
+                  style={{ borderColor: 'var(--border)' }}
+                />
+                <p className="mt-1 text-[10px] text-muted">{t('import.scheduleFormats')}</p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <button type="button" onClick={() => setScheduleText(SCHEDULE_SAMPLE)} className="text-[11px] text-primary hover:underline">
+                  {t('import.scheduleSample')}
+                </button>
+                <label className="inline-flex cursor-pointer items-center gap-1.5 text-[11px] text-primary hover:underline">
+                  <UploadCloud className="h-3.5 w-3.5" aria-hidden /> {t('import.scheduleOcr')}
+                  <input type="file" accept=".jpg,.jpeg,.png" onChange={(e) => void onScheduleImage(e)} className="hidden" />
+                </label>
+                {scheduleImage && <span className="text-[10px] text-muted">{scheduleImage.name}</span>}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <Button variant="primary" onClick={doScheduleParse} disabled={parsing || !scheduleText.trim()}>
+                  {parsing ? <><RefreshCw className="mr-1.5 h-4 w-4 animate-spin" aria-hidden /> {parsingLabel}</> : <><Sparkles className="mr-1.5 h-4 w-4" aria-hidden /> {t('import.scheduleParse')}</>}
+                </Button>
+                {notice && <span className="text-[11px] text-warning">{notice}</span>}
+              </div>
+            </div>
+          </Card>
+        )}
 
         <Card>
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
