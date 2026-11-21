@@ -1,6 +1,5 @@
 import { useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { CalendarDays, ListTodo, Clock3, Flag, TrendingUp, Sparkles, ArrowRight } from 'lucide-react';
+import { CalendarDays, ListTodo, Clock3, Flag, TrendingUp } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -18,7 +17,6 @@ export default function DashboardPage() {
   const { t } = useI18n();
   const errorText = useErrorText();
   const { timezone } = usePreferences();
-  const navigate = useNavigate();
 
   const eventsState = useAsync(() => dataService.events.list(), []);
   const tasksState = useAsync(() => dataService.tasks.list(), []);
@@ -51,12 +49,6 @@ export default function DashboardPage() {
       <PageHeader
         title={t('app.name')}
         subtitle={`${t('dashboard.subtitle')} · ${formatInZone(new Date(), 'yyyy-MM-dd EEEE', timezone)}`}
-        actions={
-          <Button variant="primary" onClick={() => navigate('/smart-planning', { state: { autoGenerate: 'day' } })}>
-            <Sparkles className="h-4 w-4" aria-hidden />
-            {t('dashboard.planMyDay')}
-          </Button>
-        }
       />
 
       {loading ? (
@@ -124,23 +116,6 @@ export default function DashboardPage() {
               )}
             </Card>
           </div>
-
-          <Card className="mt-5">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-primary" aria-hidden />
-              <h2 className="text-sm font-semibold text-ink">{t('dashboard.aiSuggestion')}</h2>
-              <Badge tone="success">{t('common.ready')}</Badge>
-            </div>
-            <p className="mt-3 text-sm leading-relaxed text-muted">{t('dashboard.aiSuggestionReady')}</p>
-            <Button
-              variant="secondary"
-              size="sm"
-              className="mt-3"
-              onClick={() => navigate('/smart-planning', { state: { autoGenerate: 'day' } })}
-            >
-              {t('dashboard.planMyDay')} <ArrowRight className="h-3.5 w-3.5" aria-hidden />
-            </Button>
-          </Card>
         </>
       )}
     </>

@@ -10,7 +10,6 @@ const TasksPage = lazy(() => import('@/pages/TasksPage'));
 const AiAssistantPage = lazy(() => import('@/pages/AiAssistantPage'));
 const AiImportPage = lazy(() => import('@/pages/AiImportPage'));
 const DeadlinesPage = lazy(() => import('@/pages/DeadlinesPage'));
-const SmartPlanningPage = lazy(() => import('@/pages/SmartPlanningPage'));
 const NotificationsPage = lazy(() => import('@/pages/NotificationsPage'));
 const HistoryPage = lazy(() => import('@/pages/HistoryPage'));
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'));
@@ -51,7 +50,6 @@ export const router = createHashRouter([
           { path: '/ai-assistant', element: withSuspense(<AiAssistantPage />) },
           { path: '/ai-import', element: withSuspense(<AiImportPage />) },
           { path: '/deadlines', element: withSuspense(<DeadlinesPage />) },
-          { path: '/smart-planning', element: withSuspense(<SmartPlanningPage />) },
           { path: '/notifications', element: withSuspense(<NotificationsPage />) },
           { path: '/history', element: withSuspense(<HistoryPage />) },
           { path: '/settings', element: withSuspense(<SettingsPage />) },

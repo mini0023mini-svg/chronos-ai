@@ -89,6 +89,8 @@ export const zhCN = {
   'calendar.scope.all': '全部',
   'calendar.scope.hint': '该日程属于重复系列，请选择本次修改影响的范围。',
   'calendar.yearViewHint': '年度总览（12 个月缩略）',
+  'calendar.weekEmpty': '本周暂无日程安排。',
+  'calendar.weekTime': '时间',
   'calendar.eventTitle': '日程标题',
   'calendar.eventStart': '开始时间',
   'calendar.eventEnd': '结束时间',

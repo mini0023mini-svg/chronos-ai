@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { toEventInput } from '@/components/calendar/CalendarShell';
+import { toEventInput, buildWeekSlots } from '@/components/calendar/CalendarShell';
 import { makeEvent } from '@/test/factories';
 
 const SGT = 'Asia/Singapore';
@@ -35,5 +35,29 @@ describe('日历事件显示时区（墙上时间投影）', () => {
     const event = makeEvent({ is_cancelled: true, occurrence_date: '2026-11-16' });
     const input = toEventInput(event, SGT);
     expect(input.display).toBe('none');
+  });
+});
+
+describe('周视图紧凑时间行（只显示有课的时间段）', () => {
+  const week = ['2026-11-16', '2026-11-17', '2026-11-18', '2026-11-19', '2026-11-20', '2026-11-21', '2026-11-22'];
+
+  it('只返回有日程的时刻，按 24 小时升序，空档时间不占位', () => {
+    const events = [
+      makeEvent({ start_at: '2026-11-16T11:50:00.000Z' }), // 19:50 SGT（晚课）
+      makeEvent({ start_at: '2026-11-17T00:30:00.000Z' }), // 08:30 SGT（早课）
+    ];
+    const { slots } = buildWeekSlots(events, week, SGT);
+    expect(slots).toEqual(['08:30', '19:50']);
+  });
+
+  it('忽略本周之外与已取消的事件', () => {
+    const events = [
+      makeEvent({ start_at: '2026-12-01T00:30:00.000Z' }), // 其他周
+      makeEvent({ start_at: '2026-11-17T00:30:00.000Z', is_cancelled: true }),
+      makeEvent({ start_at: '2026-11-18T02:10:00.000Z' }), // 10:10 SGT 有效
+    ];
+    const { slots, slotEvents } = buildWeekSlots(events, week, SGT);
+    expect(slots).toEqual(['10:10']);
+    expect(slotEvents.get('10:10')).toHaveLength(1);
   });
 });

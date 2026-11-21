@@ -91,6 +91,8 @@ export const enUS = {
   'calendar.scope.all': 'All events',
   'calendar.scope.hint': 'This event belongs to a recurring series. Choose the scope of this change.',
   'calendar.yearViewHint': 'Year overview (12 mini months)',
+  'calendar.weekEmpty': 'No events scheduled this week.',
+  'calendar.weekTime': 'Time',
   'calendar.eventTitle': 'Event title',
   'calendar.eventStart': 'Start',
   'calendar.eventEnd': 'End',

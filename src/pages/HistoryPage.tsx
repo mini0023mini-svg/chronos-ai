@@ -17,7 +17,7 @@ import type { ActionType, ModuleKey } from '@/types/enums';
 import { formatInZone } from '@/lib/timezone';
 import { cn } from '@/lib/utils';
 
-const MODULES: ModuleKey[] = ['dashboard', 'calendar', 'tasks', 'ai_assistant', 'ai_import', 'deadlines', 'smart_planning', 'notifications', 'history', 'settings'];
+const MODULES: ModuleKey[] = ['dashboard', 'calendar', 'tasks', 'ai_assistant', 'ai_import', 'deadlines', 'notifications', 'history', 'settings'];
 const ACTIONS: ActionType[] = ['create', 'update', 'delete', 'restore', 'confirm', 'complete', 'import'];
 
 const moduleLabelKey: Record<ModuleKey, I18nKey> = {

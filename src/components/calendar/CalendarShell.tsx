@@ -1,4 +1,7 @@
+import { useMemo, useState, type DragEvent } from 'react';
+import { addDays, format, parseISO } from 'date-fns';
 import type { CalendarEvent } from '@/types/models';
+import type { Locale } from '@/types/enums';
 import type { EventInput } from '@fullcalendar/core';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
@@ -73,10 +76,159 @@ export function toEventInput(event: CalendarEvent, timezone: string): EventInput
 /** 24 小时制（中国习惯）：事件标签与周视图时间轴都用它，避免 12h AM/PM */
 const timeFormat24 = { hour: '2-digit', minute: '2-digit', hour12: false } as const;
 
+const WEEK_LABELS: Record<Locale, string[]> = {
+  'zh-CN': ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
+  'en-US': ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+};
+
+/** 取某日期所在周的周一（周一为一周起点） */
+function mondayOf(dateStr: string): string {
+  const d = parseISO(dateStr);
+  const dow = (d.getDay() + 6) % 7;
+  return format(addDays(d, -dow), 'yyyy-MM-dd');
+}
+
+interface WeekBoardProps {
+  events: CalendarEvent[];
+  timezone: string;
+  locale: Locale;
+  onEventClick?: (event: CalendarEvent) => void;
+  onEventDrop?: (event: CalendarEvent, targetDate: string) => void;
+  onDateClick?: (date: string) => void;
+}
+
+/** 仅保留有日程的时间行：返回按 HH:mm 升序的时刻及其事件（纯函数，便于测试） */
+export function buildWeekSlots(events: CalendarEvent[], days: string[], timezone: string) {
+  const daySet = new Set(days);
+  const buckets = new Map<string, CalendarEvent[]>();
+  for (const e of events) {
+    if (e.is_cancelled) continue;
+    const day = formatInZone(e.start_at, 'yyyy-MM-dd', timezone);
+    if (!daySet.has(day)) continue;
+    const time = formatInZone(e.start_at, 'HH:mm', timezone);
+    const list = buckets.get(time) ?? [];
+    list.push(e);
+    buckets.set(time, list);
+  }
+  const slots = [...buckets.keys()].sort((a, b) => a.localeCompare(b));
+  for (const list of buckets.values()) list.sort((a, b) => a.start_at.localeCompare(b.start_at));
+  return { slots, slotEvents: buckets };
+}
+
+/**
+ * 自定义周视图：保留周一→周日 7 列（周日在最右），但只渲染「有日程的时间行」。
+ * 时间行来自当前周事件的墙上时间（用户时区），按开始时刻升序；空档（如午休、凌晨）不占位。
+ * 支持点击日程 / 点击空格新建 / 拖动改期（拖到目标日期列）。
+ */
+function WeekBoard({ events, timezone, locale, onEventClick, onEventDrop, onDateClick }: WeekBoardProps) {
+  const { t } = useI18n();
+  const todayKey = formatInZone(new Date(), 'yyyy-MM-dd', timezone);
+  const [anchor, setAnchor] = useState(() => mondayOf(todayKey));
+  const weekDays = useMemo(() => {
+    const monday = mondayOf(anchor);
+    return Array.from({ length: 7 }, (_, i) => format(addDays(parseISO(monday), i), 'yyyy-MM-dd'));
+  }, [anchor]);
+
+  // 当前周内非取消事件，按「墙上时间 HH:mm」分桶，只保留有事件的时间行
+  const { slots, slotEvents } = useMemo(
+    () => buildWeekSlots(events, weekDays, timezone),
+    [events, weekDays, timezone],
+  );
+
+  const shiftWeek = (delta: number) => {
+    const next = format(addDays(parseISO(anchor), delta * 7), 'yyyy-MM-dd');
+    setAnchor(next);
+  };
+
+  const onCellDrop = (evt: DragEvent<HTMLDivElement>, targetDate: string) => {
+    evt.preventDefault();
+    const id = evt.dataTransfer.getData('text/plain');
+    const found = events.find((e) => e.id === id);
+    if (found) onEventDrop?.(found, targetDate);
+  };
+
+  const weekLabel = `${weekDays[0]} ~ ${weekDays[6]}`;
+
+  return (
+    <div className="surface-card overflow-hidden p-3 sm:p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-1.5">
+          <button type="button" onClick={() => shiftWeek(-1)} className="rounded-lg border px-2.5 py-1 text-xs text-muted hover:text-ink" style={{ borderColor: 'var(--border)' }} aria-label="previous week">‹</button>
+          <button type="button" onClick={() => setAnchor(todayKey)} className="rounded-lg border px-2.5 py-1 text-xs text-ink" style={{ borderColor: 'var(--border)' }}>{t('common.today')}</button>
+          <button type="button" onClick={() => shiftWeek(1)} className="rounded-lg border px-2.5 py-1 text-xs text-muted hover:text-ink" style={{ borderColor: 'var(--border)' }} aria-label="next week">›</button>
+        </div>
+        <span className="text-xs font-medium tabular-nums text-muted">{weekLabel}</span>
+      </div>
+
+      {slots.length === 0 ? (
+        <p className="py-10 text-center text-sm text-muted">{t('calendar.weekEmpty')}</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <div className="min-w-[720px]">
+            <div className="grid grid-cols-[64px_repeat(7,minmax(0,1fr))] border-b" style={{ borderColor: 'var(--border)' }}>
+              <div className="px-1 py-2 text-center text-[10px] text-muted">{t('calendar.weekTime')}</div>
+              {weekDays.map((day, i) => (
+                <div key={day} className={`px-1 py-2 text-center ${day === todayKey ? 'text-primary' : 'text-ink'}`}>
+                  <p className="text-xs font-semibold">{WEEK_LABELS[locale][i]}</p>
+                  <p className="text-[10px] tabular-nums text-muted">{day.slice(5)}</p>
+                </div>
+              ))}
+            </div>
+            {slots.map((time) => (
+              <div key={time} className="grid grid-cols-[64px_repeat(7,minmax(0,1fr))] border-b last:border-b-0" style={{ borderColor: 'var(--border)' }}>
+                <div className="px-1 py-2 text-center text-[11px] font-medium tabular-nums text-muted">{time}</div>
+                {weekDays.map((day) => {
+                  const list = (slotEvents.get(time) ?? []).filter((e) => formatInZone(e.start_at, 'yyyy-MM-dd', timezone) === day);
+                  return (
+                    <div
+                      key={day}
+                      className="min-h-[52px] border-l px-1 py-1"
+                      style={{ borderColor: 'var(--border)' }}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => onCellDrop(e, day)}
+                      onClick={() => onDateClick?.(day)}
+                    >
+                      {list.map((e) => {
+                        const color = e.category_id ? (colorByCategory[e.category_id] ?? '#829CC4') : '#829CC4';
+                        const end = formatInZone(e.end_at, 'HH:mm', timezone);
+                        return (
+                          <button
+                            key={e.id}
+                            type="button"
+                            draggable={Boolean(onEventDrop)}
+                            onDragStart={(ev) => ev.dataTransfer.setData('text/plain', e.id)}
+                            onClick={(ev) => { ev.stopPropagation(); onEventClick?.(e); }}
+                            className="mb-1 block w-full rounded-md px-1.5 py-1 text-left text-[11px] leading-tight text-white transition hover:brightness-105"
+                            style={{ backgroundColor: color }}
+                            title={`${e.title} ${time}-${end}${e.location ? ` @${e.location}` : ''}`}
+                          >
+                            <span className="block truncate font-medium">{e.title}</span>
+                            <span className="block truncate text-[10px] opacity-90">{time}-{end}{e.location ? ` · ${e.location}` : ''}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** FullCalendar 包装器：接入点击 / 拖动 / 空白日期新建 */
 export function CalendarShell({ events, view, timezone = DEFAULT_TIMEZONE, onEventClick, onEventDrop, onDateClick }: CalendarShellProps) {
   const { locale } = useI18n();
-  const calendarView = view === 'month' ? 'dayGridMonth' : view === 'week' ? 'timeGridWeek' : 'timeGridDay';
+
+  // 周视图改用自定义紧凑看板：只留有课的时间行，跳过空档；其余视图仍用 FullCalendar
+  if (view === 'week') {
+    return <WeekBoard events={events} timezone={timezone} locale={locale} onEventClick={onEventClick} onEventDrop={onEventDrop} onDateClick={onDateClick} />;
+  }
+
+  const calendarView = view === 'month' ? 'dayGridMonth' : 'timeGridDay';
 
   return (
     <div className="surface-card overflow-hidden p-3 sm:p-4">

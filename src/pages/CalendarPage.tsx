@@ -36,7 +36,7 @@ export default function CalendarPage() {
   const { t } = useI18n();
   const errorText = useErrorText();
   const { timezone } = usePreferences();
-  const [view, setView] = useState<View>('month');
+  const [view, setView] = useState<View>('week');
   const eventsState = useAsync(() => dataService.events.list(), []);
   const categoriesState = useAsync(() => dataService.categories.list(), []);
   useDataSync('all', eventsState.refresh);
