@@ -1,6 +1,6 @@
 import { addDays, addMinutes, format, parseISO } from 'date-fns';
 import type { AiContext, AiReply } from '@/types/api';
-import type { CalendarEvent, PendingAction } from '@/types/models';
+import type { CalendarEvent, ChatMessage, PendingAction } from '@/types/models';
 import type { Locale } from '@/types/enums';
 import { detectConflicts, type RecurrenceSpec } from './recurrence';
 import { formatInZone, fromZoneTime } from './timezone';
@@ -411,6 +411,24 @@ export function assistantIntro(locale: Locale): string {
 
 /** 计算空闲时段（导出供智能规划等模块复用） */
 export { findFreeSlots };
+
+/**
+ * 确认写入后更新会话消息：把目标消息标记为已处理，并移除本次确认的操作。
+ * 纯函数。调用方必须把返回值同时写入内存状态与会话存储，否则会话重载会读回旧消息，
+ * 界面卡片回滚成「待确认」，表现为「点了确认写入没反应」且可能重复写入。
+ */
+export function resolveConfirmedMessages(
+  messages: ChatMessage[],
+  index: number,
+  ids: string[],
+): ChatMessage[] {
+  return messages.map((m, i) => {
+    if (i !== index) return m;
+    const remaining = m.pendingActions?.filter((a) => !ids.includes(a.id)) ?? [];
+    // 全部确认（或忽略）后才标记已处理；部分确认时保留剩余操作可继续确认。
+    return { ...m, resolved: remaining.length === 0, pendingActions: remaining };
+  });
+}
 
 /** 把待确认操作的时间载荷格式化为可读标签 */
 export function describePendingAction(action: PendingAction, timezone: string, locale: Locale): string {

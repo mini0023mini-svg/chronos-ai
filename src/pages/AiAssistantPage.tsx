@@ -21,7 +21,7 @@ import {
   confirmPendingActions,
   type ChatSource,
 } from '@/services/assistantService';
-import { describePendingAction } from '@/lib/assistantEngine';
+import { describePendingAction, resolveConfirmedMessages } from '@/lib/assistantEngine';
 import { formatInZone } from '@/lib/timezone';
 import type { ChatMessage, PendingAction, AiConversation } from '@/types/models';
 import { cn } from '@/lib/utils';
@@ -152,16 +152,20 @@ export default function AiAssistantPage() {
       return;
     }
     setNotice(t('ai.writeSuccess', { n: String(result.data.created) }));
-    setMessages((prev) => prev.map((m, i) =>
-      i === msgIndex ? { ...m, resolved: true, pendingActions: m.pendingActions?.filter((a) => !ids.includes(a.id)) } : m,
-    ));
+    const next = resolveConfirmedMessages(messages, msgIndex, ids);
+    setMessages(next);
+    // 关键：把「已确认」状态持久化到会话。若只更新内存，随后任何会话重载都会
+    // 从 localStorage 读回未确认的旧消息并覆盖 UI，导致卡片回滚、看起来没反应，
+    // 再次点击还会重复写入。persist 同时会清掉该消息的 pending_actions 快照。
+    await persist(next);
+    // 仅刷新 AI 上下文供后续对话使用；不再 reload 会话，避免用重载数据覆盖已确认状态。
     ctxState.reload();
-    convState.reload();
   };
 
   const handleIgnore = async (msgIndex: number) => {
-    setMessages((prev) => prev.map((m, i) => i === msgIndex ? { ...m, resolved: true, pendingActions: [] } : m));
-    const next = messages.map((m, i) => i === msgIndex ? { ...m, resolved: true, pendingActions: [] } : m);
+    const ids = (messages[msgIndex]?.pendingActions ?? []).map((a) => a.id);
+    const next = resolveConfirmedMessages(messages, msgIndex, ids);
+    setMessages(next);
     await persist(next);
   };
 
@@ -306,8 +310,8 @@ interface MessageBubbleProps {
   index: number;
   timezone: string;
   locale: 'zh-CN' | 'en-US';
-  onConfirm: (index: number, ids: string[]) => void;
-  onIgnore: (index: number) => void;
+  onConfirm: (index: number, ids: string[]) => Promise<void>;
+  onIgnore: (index: number) => Promise<void>;
 }
 
 function MessageBubble({ message, index, timezone, locale, onConfirm, onIgnore }: MessageBubbleProps) {
@@ -328,8 +332,11 @@ function MessageBubble({ message, index, timezone, locale, onConfirm, onIgnore }
 
   const confirm = async () => {
     setBusy(true);
-    await onConfirm(index, chosen);
-    setBusy(false);
+    try {
+      await onConfirm(index, chosen);
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (

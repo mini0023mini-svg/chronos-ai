@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { parseLocalText, annotateRisks } from '@/lib/importParser';
-import { runLocalAssistant } from '@/lib/assistantEngine';
+import { runLocalAssistant, resolveConfirmedMessages } from '@/lib/assistantEngine';
 import { rankTasks, buildPlan } from '@/lib/planningEngine';
 import { scanDueItems } from '@/lib/notification';
 import { formatInZone } from '@/lib/timezone';
 import { cleanOcrText } from '@/lib/ocr';
 import { makeContext, makeEvent, makeTask, makeDeadline } from '@/test/factories';
+import type { ChatMessage } from '@/types/models';
 
 const parseOpts = { now: new Date('2026-11-18T02:00:00.000Z'), timezone: 'Asia/Singapore' };
 
@@ -161,6 +162,55 @@ describe('notification.scanDueItems', () => {
 
   it('dueLabel 使用用户时区格式化', () => {
     expect(formatInZone('2026-11-18T02:20:00.000Z', 'HH:mm', 'Asia/Singapore')).toBe('10:20');
+  });
+});
+
+describe('resolveConfirmedMessages（确认写入后的消息状态）', () => {
+  const mkAction = (id: string) => ({
+    id,
+    kind: 'create_deadline' as const,
+    payload: { title: `任务${id}`, due_at: '2026-11-24T15:59:00.000Z' },
+    description: `任务${id}`,
+    conflicts: [],
+  });
+
+  it('全部确认后标记 resolved 并清空待确认操作', () => {
+    const messages: ChatMessage[] = [{
+      role: 'assistant' as const,
+      content: '已生成待确认操作',
+      ts: 't1',
+      pendingActions: [mkAction('a1'), mkAction('a2')],
+    }];
+    const next = resolveConfirmedMessages(messages, 0, ['a1', 'a2']);
+    expect(next[0].resolved).toBe(true);
+    expect(next[0].pendingActions).toEqual([]);
+    // 原数组不被修改
+    expect(messages[0].resolved).toBeUndefined();
+    expect(messages[0].pendingActions).toHaveLength(2);
+  });
+
+  it('部分确认后保持未处理，剩余操作仍在会话待办快照中', () => {
+    const messages: ChatMessage[] = [{
+      role: 'assistant' as const,
+      content: '已生成 2 条待确认',
+      ts: 't1',
+      pendingActions: [mkAction('a1'), mkAction('a2')],
+    }];
+    const next = resolveConfirmedMessages(messages, 0, ['a1']);
+    expect(next[0].resolved).toBe(false);
+    const pending = next.filter((m) => m.pendingActions?.length && !m.resolved).flatMap((m) => m.pendingActions ?? []);
+    expect(pending.map((p) => p.id)).toEqual(['a2']);
+  });
+
+  it('不影响其他消息的待确认状态', () => {
+    const messages: ChatMessage[] = [
+      { role: 'assistant' as const, content: 'msg1', ts: 't1', pendingActions: [mkAction('a1')] },
+      { role: 'assistant' as const, content: 'msg2', ts: 't2', pendingActions: [mkAction('a2')] },
+    ];
+    const next = resolveConfirmedMessages(messages, 0, ['a1']);
+    expect(next[0].resolved).toBe(true);
+    expect(next[1].resolved).toBeUndefined();
+    expect(next[1].pendingActions?.[0].id).toBe('a2');
   });
 });
 
